@@ -4,7 +4,7 @@ FROM alpine:3.11 as downloader
 
 RUN apk add --no-cache curl
 
-ARG TARGETARCH="amd64"
+ARG TARGETARCH="arm64"
 
 ARG terragrunt_version="v0.36.6"
 ARG infracost_version="v0.9.21"
@@ -61,6 +61,8 @@ RUN set -ex \
     && mv "infracost-linux-${TARGETARCH}" /usr/local/bin/infracost
 
 FROM ghcr.io/runatlantis/atlantis:${atlantis_version} as atlantis
+
+ARG TARGETARCH="amd64"
 
 LABEL org.opencontainers.image.description "Atlantis server with Terragrunt, InfraCost, Helmfile, Helm, Kubectl and other add-ons."
 
