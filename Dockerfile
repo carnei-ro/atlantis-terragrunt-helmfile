@@ -1,5 +1,25 @@
 ARG atlantis_version=dev
 
+FROM golang:1.16 as vals-builder
+
+ARG vals_base_ref="master"
+
+ENV CGO_ENABLED=0
+
+WORKDIR /build
+
+RUN git config --global user.email "leandro@carnei.ro" \
+    && git config --global user.name "carnei-ro" \
+    && git clone https://github.com/variantdev/vals
+
+WORKDIR /build/vals
+
+RUN git checkout "${vals_base_ref}" \
+    && git remote add carnei-ro https://github.com/carnei-ro/vals.git \
+    && git fetch --all \
+    && git merge --no-ff --no-edit carnei-ro/feat/tfstate/remote \
+    && go build -o bin/vals ./cmd/vals
+
 FROM alpine:3.11 as downloader
 
 RUN apk add --no-cache curl
@@ -13,6 +33,7 @@ ARG helm_version="3.8.1"
 ARG helmfile_version="0.143.0"
 ARG kubectl_version="1.21.11"
 ARG kustomize_version="3.10.0"
+ARG tfstate_lookup_version="0.4.2"
 
 ENV TERRAGRUNT_VERSION="${terragrunt_version}" \
     INFRACOST_VERSION="${infracost_version}"
@@ -50,6 +71,15 @@ RUN set -ex \
     && chmod -v 755 /usr/local/bin/kustomize
 
 RUN set -ex \
+    && wget -q -O tfstate-lookup.tar.gz \
+        "https://github.com/fujiwara/tfstate-lookup/releases/download/v${tfstate_lookup_version}/tfstate-lookup_${tfstate_lookup_version}_linux_${TARGETARCH}.tar.gz" \
+    && tar -xzvf tfstate-lookup.tar.gz \
+    && rm -f tfstate-lookup.tar.gz \
+    && mv tfstate-lookup /usr/local/bin/tfstate-lookup \
+    && chown -v root:root /usr/local/bin/tfstate-lookup \
+    && chmod -v 755 /usr/local/bin/tfstate-lookup
+
+RUN set -ex \
     && curl -sL "https://github.com/gruntwork-io/terragrunt/releases/download/${TERRAGRUNT_VERSION}/terragrunt_linux_${TARGETARCH}" --output terragrunt \
     && chmod +x terragrunt \
     && mv terragrunt /usr/local/bin
@@ -66,10 +96,13 @@ ARG TARGETARCH="amd64"
 
 LABEL org.opencontainers.image.description "Atlantis server with Terragrunt, InfraCost, Helmfile, Helm, Kubectl and other add-ons."
 
+COPY --from=vals-builder /build/vals/bin/vals /usr/local/bin/vals
+
 COPY --from=downloader /usr/local/bin/helm /usr/local/bin/helm
 COPY --from=downloader /usr/local/bin/helmfile /usr/local/bin/helmfile
 COPY --from=downloader /usr/local/bin/kubectl /usr/local/bin/kubectl
 COPY --from=downloader /usr/local/bin/kustomize /usr/local/bin/kustomize
+COPY --from=downloader /usr/local/bin/tfstate-lookup /usr/local/bin/tfstate-lookup
 COPY --from=downloader /usr/local/bin/terragrunt /usr/local/bin/terragrunt
 COPY --from=downloader /usr/local/bin/infracost /usr/local/bin/infracost
 
