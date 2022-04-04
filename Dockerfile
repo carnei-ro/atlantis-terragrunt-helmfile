@@ -74,6 +74,7 @@ COPY --from=downloader /usr/local/bin/terragrunt /usr/local/bin/terragrunt
 COPY --from=downloader /usr/local/bin/infracost /usr/local/bin/infracost
 
 RUN set -ex \
+    && apk add --no-cache curl jq \
     && mkdir -p ~/.config/kustomize/plugin/v1/none \
     && helm plugin install https://github.com/databus23/helm-diff \
     && helm plugin install https://github.com/aslafy-z/helm-git \
@@ -93,3 +94,4 @@ RUN set -ex \
 USER root
 
 COPY hack/format-diff-output.sh /usr/local/bin/format-diff-output.sh
+COPY hack/patch-terraform-cloud-workspace-execution-mode.sh /usr/local/bin/patch-terraform-cloud-workspace-execution-mode.sh
