@@ -1,5 +1,27 @@
 ARG atlantis_version=dev
 
+FROM golang:1.17.3 as helmfile-builder
+
+# tag: v0.143.0
+ARG helmfile_base_ref="9e9a90f8ef30ec0f0f3e03e2f69fb4703c7e7831"
+
+ENV CGO_ENABLED=0
+
+WORKDIR /build
+
+RUN git config --global user.email "leandro@carnei.ro" \
+    && git config --global user.name "carnei-ro" \
+    && git clone https://github.com/roboll/helmfile.git
+
+WORKDIR /build/helmfile
+
+RUN git checkout "${helmfile_base_ref}" \
+    && find . -type f -iname "*.go" -exec sed -i "s|github.com/variantdev/vals|github.com/carnei-ro/vals|g" {} \; \
+    && sed -i 's|github.com/variantdev/vals v0.15.0|github.com/carnei-ro/vals v0.16.0|g' go.mod \
+    && go mod download github.com/carnei-ro/vals \
+    && go mod download github.com/fujiwara/tfstate-lookup \
+    && go build -o helmfile ./main.go
+
 FROM golang:1.16 as vals-builder
 
 ARG vals_base_ref="master"
@@ -47,12 +69,12 @@ RUN set -ex \
     && chown -v root:root /usr/local/bin/helm \
     && chmod -v 755 /usr/local/bin/helm
 
-RUN set -ex \
-    && wget -q -O helmfile \
-        "https://github.com/roboll/helmfile/releases/download/v${helmfile_version}/helmfile_linux_${TARGETARCH}" \
-    && mv helmfile /usr/local/bin/helmfile \
-    && chown -v root:root /usr/local/bin/helmfile \
-    && chmod -v 755 /usr/local/bin/helmfile 
+# RUN set -ex \
+#     && wget -q -O helmfile \
+#         "https://github.com/roboll/helmfile/releases/download/v${helmfile_version}/helmfile_linux_${TARGETARCH}" \
+#     && mv helmfile /usr/local/bin/helmfile \
+#     && chown -v root:root /usr/local/bin/helmfile \
+#     && chmod -v 755 /usr/local/bin/helmfile
 
 RUN set -ex \
     && wget -q -O kubectl \
@@ -97,9 +119,10 @@ ARG TARGETARCH="amd64"
 LABEL org.opencontainers.image.description "Atlantis server with Terragrunt, InfraCost, Helmfile, Helm, Kubectl and other add-ons."
 
 COPY --from=vals-builder /build/vals/bin/vals /usr/local/bin/vals
+COPY --from=helmfile-builder /build/helmfile/helmfile /usr/local/bin/helmfile
 
 COPY --from=downloader /usr/local/bin/helm /usr/local/bin/helm
-COPY --from=downloader /usr/local/bin/helmfile /usr/local/bin/helmfile
+# COPY --from=downloader /usr/local/bin/helmfile /usr/local/bin/helmfile
 COPY --from=downloader /usr/local/bin/kubectl /usr/local/bin/kubectl
 COPY --from=downloader /usr/local/bin/kustomize /usr/local/bin/kustomize
 COPY --from=downloader /usr/local/bin/tfstate-lookup /usr/local/bin/tfstate-lookup
